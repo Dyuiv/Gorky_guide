@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.15.1
+    container_name: qdrant_bitter
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # HTTP API
+      - "6334:6334"   # gRPC (опционально)
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
