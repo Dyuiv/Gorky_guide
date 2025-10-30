@@ -5,6 +5,8 @@ def geocode_nominatim(query: str, limit: int = 5, viewbox=None, bounded=True):
     Выполняет поиск адресов/объектов через Nominatim и возвращает список координат с подписью.
     """
     url = "https://nominatim.openstreetmap.org/search"
+    if "нижний новгород" not in query.lower():
+        query = f"{query}" + ", Нижний Новгород"
     params = {"q": query, "format": "jsonv2", "limit": limit}
     if viewbox:
         params.update({"viewbox": f"{viewbox[0]},{viewbox[1]},{viewbox[2]},{viewbox[3]}",

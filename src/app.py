@@ -100,7 +100,7 @@ def kb_restart_only() -> InlineKeyboardMarkup:
 
 async def send_step1(message: Message, state: FSMContext):
     await state.set_state(BuildRoute.interests)
-    await message.answer("1/3. Напишите интересы (например: стрит-арт, история, кофейни):", reply_markup=kb_restart_only())
+    await message.answer("1/3. Расскажите о ваших интересах (например: жизнь Максима Горького):", reply_markup=kb_restart_only())
 
 @dp.message(Command("start"))
 async def cmd_start(m: Message, state: FSMContext):
@@ -130,7 +130,7 @@ async def ask_hours(m: Message, state: FSMContext):
     await state.set_state(BuildRoute.hours)
     await m.answer(
         "2/3. Сколько у вас времени на прогулку (в часах)? "
-        "Можно дробное число: например 1.5",
+        "Можно дробное число: например 3.5",
         reply_markup=kb_restart_only()
     )
 
@@ -144,7 +144,7 @@ async def ask_location_method(m: Message, state: FSMContext):
             raise ValueError
     except Exception:
         await m.answer(
-            "Введите, пожалуйста, число часов (можно с дробной частью), например: 1.5",
+            "Введите, пожалуйста, число часов (можно с дробной частью), например: 3.5",
             reply_markup=kb_restart_only()
         )
         return
@@ -156,13 +156,13 @@ async def ask_location_method(m: Message, state: FSMContext):
 @dp.callback_query(BuildRoute.location_method, F.data == "loc_addr")
 async def choose_addr(c, state: FSMContext):
     await state.set_state(BuildRoute.address)
-    await c.message.answer("Введите адрес (улица, дом, город):", reply_markup=kb_restart_only())
+    await c.message.answer("Где вы находитесь? (например: Лицей 38 или адрес):", reply_markup=kb_restart_only())
     await c.answer()
 
 @dp.callback_query(BuildRoute.location_method, F.data == "loc_coord")
 async def choose_coords(c, state: FSMContext):
     await state.set_state(BuildRoute.coord_lon)
-    await c.message.answer("Ок. Сначала отправьте **долготу** (lon), например: 44.003111", reply_markup=kb_restart_only())
+    await c.message.answer("Сначала отправьте **долготу** (lon), например: 44.003111", reply_markup=kb_restart_only())
     await c.answer()
 
 @dp.callback_query(BuildRoute.location_method, F.data == "loc_geo")
@@ -293,7 +293,6 @@ async def finalize_route(m: Message, state: FSMContext, *, lat: float, lon: floa
             if walk_to_main_min is not None:
                 try:
                     walk_to_main_min = float(walk_to_main_min)
-                    # добавим 15 минут осмотра как для «main»
                     need_extra_min = int(round(walk_to_main_min + 15))
                     if nearest_title and nearest_km is not None:
                         hint_lines.append(
@@ -342,7 +341,6 @@ async def finalize_route(m: Message, state: FSMContext, *, lat: float, lon: floa
     main_points = [poi for poi, role in zip(places, roles_for_places) if role == "main"]
     extra_points = [poi for poi, role in zip(places, roles_for_places) if role != "main"]
 
-    # Подсказка, если маршрут построен, но «main» не попали
     if not main_points:
         nearest = (result.get("nearest_main_info") or {})
         nearest_title = nearest.get("title")
@@ -357,7 +355,6 @@ async def finalize_route(m: Message, state: FSMContext, *, lat: float, lon: floa
         if walk_to_main_min is not None:
             try:
                 walk_to_main_min = float(walk_to_main_min)
-                # 15 минут на осмотр главной
                 need_extra_min = max(0, int(round(walk_to_main_min + 15 - slack_min)))
             except Exception:
                 pass
