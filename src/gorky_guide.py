@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 
 try:
     import google.generativeai as genai
-except Exception as e:  # мягкая ошибка импорта — чтобы сообщение было понятным
+except Exception as e:
     raise RuntimeError(
         "Не установлен пакет google-generativeai. Установите: pip install google-generativeai"
     ) from e
@@ -111,12 +111,10 @@ def get_reason(
     txt = resp.text or ""
     try:
         data = json.loads(txt)
-        # Лёгкая нормализация
         data.setdefault("intro", "")
         data.setdefault("mains", [])
         data.setdefault("extras", [])
         data.setdefault("outro", "")
-        # Обрезаем пустые/дубли
         data["mains"] = [
             {"title": (m.get("title") or "").strip(),
              "summary": (m.get("summary") or "").strip()}

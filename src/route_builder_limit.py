@@ -13,7 +13,7 @@ from src.route_bulder_foot import (
     nearest_neighbor, two_opt, DEFAULT_PROFILE
 )
 
-Coord = Tuple[float, float]  # (lon, lat)
+Coord = Tuple[float, float]
 
 def _sum_time_minutes(order: List[int],
                       durations_sec: List[List[float]],
@@ -126,10 +126,32 @@ async def plan_route_under_budget(
         alpha=alpha,
         geo_tau_km=geo_tau_km,
         category_ids=category_ids,
-        hard_drop_km= 30
+        hard_drop_km=30
     )
     if not rows:
-        return {"selected_poi": [], "reason": "no_candidates", "main_semantic": main_semantic}
+        nearest_main = None
+        nearest_d_km = None
+        for ms in main_semantic:
+            d = _haversine_km(user_lat, user_lon, ms["lat"], ms["lon"])
+            if nearest_d_km is None or d < nearest_d_km:
+                nearest_d_km = d
+                nearest_main = ms
+        walk_kmh = 5.0 / max(pace_scale, 1e-6)
+        detour = 1.25
+        walk_minutes_to_nearest_main = None
+        if nearest_d_km is not None:
+            walk_minutes_to_nearest_main = (nearest_d_km * detour) / max(walk_kmh, 1e-6) * 60.0
+
+        return {
+            "selected_poi": [],
+            "reason": "no_candidates",
+            "main_semantic": main_semantic,
+            "nearest_main_info": {
+                "title": nearest_main["title"] if nearest_main else None,
+                "distance_km": nearest_d_km
+            },
+            "walk_minutes_to_nearest_main": walk_minutes_to_nearest_main
+        }
 
     promoted_keys: List[str] = []
     for ms in main_semantic:
@@ -157,9 +179,8 @@ async def plan_route_under_budget(
     best_order_local = None
     best_time_min = inf
 
-    for n in range(1, len(all_points)):  # n = число POI
+    for n in range(1, len(all_points)):
         idxs = list(range(0, n + 1))
-        # подматрица (n+1) x (n+1)
         M = [
             [durations_full[i][j] if durations_full[i][j] is not None else inf for j in idxs]
             for i in idxs
@@ -181,12 +202,30 @@ async def plan_route_under_budget(
         else:
             break
 
+    nearest_main = None
+    nearest_d_km = None
+    for ms in main_semantic:
+        d = _haversine_km(user_lat, user_lon, ms["lat"], ms["lon"])
+        if nearest_d_km is None or d < nearest_d_km:
+            nearest_d_km = d
+            nearest_main = ms
+    walk_kmh = 5.0 / max(pace_scale, 1e-6)
+    detour = 1.25
+    walk_minutes_to_nearest_main = None
+    if nearest_d_km is not None:
+        walk_minutes_to_nearest_main = (nearest_d_km * detour) / max(walk_kmh, 1e-6) * 60.0
+
     if best_n == 0:
         return {
             "selected_poi": [],
             "reason": "time_budget_too_small",
             "estimated_minutes": best_time_min,
-            "main_semantic": main_semantic
+            "main_semantic": main_semantic,
+            "nearest_main_info": {
+                "title": nearest_main["title"] if nearest_main else None,
+                "distance_km": nearest_d_km
+            },
+            "walk_minutes_to_nearest_main": walk_minutes_to_nearest_main
         }
 
     final_points = [start] + pois[:best_n]
@@ -243,4 +282,11 @@ async def plan_route_under_budget(
     result["fixed_order"] = best_order_local
     result["main_semantic"] = main_semantic
     result["main_semantic_not_in_route"] = main_semantic_not_in_route
+
+    result["nearest_main_info"] = {
+        "title": nearest_main["title"] if nearest_main else None,
+        "distance_km": nearest_d_km
+    }
+    result["walk_minutes_to_nearest_main"] = walk_minutes_to_nearest_main
+
     return result

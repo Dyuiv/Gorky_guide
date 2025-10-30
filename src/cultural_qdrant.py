@@ -7,7 +7,6 @@ import math
 import pandas as pd
 from typing import Tuple, Optional, List, Dict
 
-# --- Qdrant ---
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
@@ -81,7 +80,6 @@ def text_for_embedding(category_id: Optional[int], title: Optional[str], descrip
         parts.append(" ".join(synonyms))
     if description:
         parts.append(description)
-    # Небольшое разделение для читаемости (не критично для модели)
     text = " | ".join([p for p in parts if p])
     return f"passage: {text}"
 
@@ -96,7 +94,7 @@ def build_payload(row: pd.Series) -> Dict:
         "title": (row.get("title") or "").strip(),
         "address": (row.get("address") or "").strip(),
         "description": strip_html(row.get("description")),
-        "coordinate": row.get("coordinate"),              # оригинальная строка POINT (...)
+        "coordinate": row.get("coordinate"),
         "category_id": int(category_id) if pd.notna(category_id) else None,
         "category_name": cat_name,
         "url": None if pd.isna(row.get("url")) else str(row.get("url")),

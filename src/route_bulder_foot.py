@@ -1,4 +1,3 @@
-# walking_route_local_osrm.py
 import time
 from typing import List, Tuple, Optional
 import requests
@@ -6,7 +5,7 @@ import folium
 from folium.plugins import PolyLineTextPath
 
 
-Coord = Tuple[float, float]  # (lon, lat)
+Coord = Tuple[float, float]
 
 OSRM = "http://localhost:5000"
 DEFAULT_PROFILE = "foot"
@@ -20,7 +19,6 @@ def http_get_json(url: str, params: Optional[dict] = None) -> dict:
     for attempt in range(1, RETRY_COUNT + 1):
         try:
             r = sess.get(url, params=params, timeout=REQUEST_TIMEOUT)
-            # мягкая обработка 429/5xx
             if r.status_code >= 500 or r.status_code == 429:
                 raise requests.HTTPError(f"{r.status_code} {r.text[:200]}")
             r.raise_for_status()
@@ -306,7 +304,7 @@ def build_walking_route(
         for leg in leg_infos:
             idx_to = leg["to_idx"]
             role_to = node_roles[idx_to] if (node_roles and 0 <= idx_to < len(node_roles)) else "additional"
-            m = float(leg["stop_min_after"] or 0.0)  # уже минуты
+            m = float(leg["stop_min_after"] or 0.0)
             if role_to == "main":
                 dwell_main_min += m
             else:

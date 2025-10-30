@@ -242,13 +242,6 @@ async def geo_expected(m: Message, state: FSMContext):
 async def finalize_route(m: Message, state: FSMContext, *, lat: float, lon: float):
     """
         Финальный шаг: собирает параметры, строит маршрут, генерирует текст-гид и отправляет ссылку на карту.
-        Args:
-            m (Message): Сообщение для ответов пользователю.
-            state (FSMContext): Машина состояний для чтения интересов и времени.
-            lat (float): Широта старта.
-            lon (float): Долгота старта.
-        Returns:
-            None
     """
     data = await state.get_data()
     interests = data["interests"]
@@ -283,22 +276,48 @@ async def finalize_route(m: Message, state: FSMContext, *, lat: float, lon: floa
     reason = result.get("reason")
     if reason != "ok_under_budget":
         if reason == "time_budget_too_small":
-            est_min = result.get("estimated_minutes")  # может быть float
-            hint = ""
+            est_min = result.get("estimated_minutes")
+            nearest = (result.get("nearest_main_info") or {})
+            nearest_title = nearest.get("title")
+            nearest_km = nearest.get("distance_km")
+            walk_to_main_min = result.get("walk_minutes_to_nearest_main")
+
+            hint_lines = []
             if est_min:
                 try:
                     est_min = int(round(float(est_min)))
-                    hint = f" (минимальная оценка сейчас ~{est_min} мин)"
+                    hint_lines.append(f"минимальная оценка сейчас ~{est_min} мин")
                 except Exception:
                     pass
-            await m.answer(
-                "Маршрут не удалось уложить во время." + hint +
+
+            if walk_to_main_min is not None:
+                try:
+                    walk_to_main_min = float(walk_to_main_min)
+                    # добавим 15 минут осмотра как для «main»
+                    need_extra_min = int(round(walk_to_main_min + 15))
+                    if nearest_title and nearest_km is not None:
+                        hint_lines.append(
+                            f"чтобы дойти до важной точки «{nearest_title}» (~{nearest_km:.1f} км) "
+                            f"и успеть осмотреть её, добавьте ≈{need_extra_min} мин"
+                        )
+                    else:
+                        hint_lines.append(
+                            "чтобы дойти до ближайшей важной точки и осмотреть её, добавьте ≈{need_extra_min} мин"
+                        )
+                except Exception:
+                    pass
+
+            msg = "Маршрут не удалось уложить во время."
+            if hint_lines:
+                msg += " (" + "; ".join(hint_lines) + ")"
+
+            msg += (
                 "\nЧто можно сделать:\n"
                 "• Увеличить время прогулки\n"
                 "• Выбрать старт ближе к Нижнему Новгороду\n"
-                "• Уточнить интересы (например: «стрит-арт, набережная»)",
-                reply_markup=kb_location_choice()
+                "• Уточнить интересы (например: «стрит-арт, набережная»)"
             )
+            await m.answer(msg, reply_markup=kb_location_choice())
             await state.set_state(BuildRoute.location_method)
             return
 
@@ -315,18 +334,47 @@ async def finalize_route(m: Message, state: FSMContext, *, lat: float, lon: floa
             reply_markup=kb_restart_only()
         )
         return
-    places = result.get("selected_poi", [])
-    node_roles = result.get("node_roles",
-                            []) or []
 
+    places = result.get("selected_poi", [])
+    node_roles = result.get("node_roles", []) or []
     roles_for_places = node_roles[1:1 + len(places)]
 
     main_points = [poi for poi, role in zip(places, roles_for_places) if role == "main"]
     extra_points = [poi for poi, role in zip(places, roles_for_places) if role != "main"]
 
-    if not main_points and places:
-        main_points = places[:min(3, len(places))]
-        extra_points = places[min(3, len(places)):]
+    # Подсказка, если маршрут построен, но «main» не попали
+    if not main_points:
+        nearest = (result.get("nearest_main_info") or {})
+        nearest_title = nearest.get("title")
+        nearest_km = nearest.get("distance_km")
+        walk_to_main_min = result.get("walk_minutes_to_nearest_main")
+
+        budget_min = hours * 60.0
+        est_fast_min = float(result.get("estimated_minutes_fast") or 0.0)
+        slack_min = max(0.0, budget_min - est_fast_min)
+
+        need_extra_min = None
+        if walk_to_main_min is not None:
+            try:
+                walk_to_main_min = float(walk_to_main_min)
+                # 15 минут на осмотр главной
+                need_extra_min = max(0, int(round(walk_to_main_min + 15 - slack_min)))
+            except Exception:
+                pass
+
+        if need_extra_min is not None and need_extra_min > 0:
+            if nearest_title and nearest_km is not None:
+                await m.answer(
+                    f"Сейчас маршрут уложился, но без «основных» точек.\n"
+                    f"Ближайшая важная точка — «{nearest_title}» (~{nearest_km:.1f} км).\n"
+                    f"Добавьте примерно ещё {need_extra_min} мин к бюджету, чтобы успеть дойти и осмотреть её."
+                )
+            else:
+                await m.answer(
+                    f"Сейчас маршрут уложился, но без «основных» точек.\n"
+                    f"Добавьте примерно ещё {need_extra_min} мин к бюджету, чтобы успеть дойти до ближайшей важной точки и осмотреть её."
+                )
+
     guide = get_reason(
         user_query=interests,
         main_points=main_points,
@@ -349,6 +397,7 @@ async def finalize_route(m: Message, state: FSMContext, *, lat: float, lon: floa
 
     await m.answer("Готово! Открывайте маршрут 👇", reply_markup=kb_open)
     await state.clear()
+
 
 async def create_web_app():
     app = web.Application()
