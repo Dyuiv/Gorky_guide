@@ -34,7 +34,7 @@ def get_reason(
     *,
     language: str = "ru",
     model_name: str = "gemini-2.5-flash",
-    temperature: float = 0.4,
+    temperature: float = 0.25,
 ) -> Dict[str, Any]:
     """
         Запрашивает у Gemini краткий JSON-гид: интро, причины по основным точкам и подсказки по доп. точкам.
@@ -49,7 +49,15 @@ def get_reason(
             Dict[str, Any]: Структура с intro/mains/extras/outro (или отладочная info при не-JSON).
     """
     model = _ensure_model(model_name)
+    main_points = main_points[:4]
+    extra_points = extra_points[:6]
 
+    def _clip(s, n=420):
+        s = (s or "").strip()
+        return s if len(s) <= n else s[:n].rsplit(" ", 1)[0] + "…"
+
+    for p in main_points + extra_points:
+        p["description"] = _clip(p.get("description") or "")
     generation_config = genai.types.GenerationConfig(
         temperature=temperature,
         response_mime_type="application/json",
@@ -77,27 +85,27 @@ def get_reason(
     }
 
     system_instruction = f"""
-Ты — гид по городской прогулке. Отвечай на {language}.
-Используй ТОЛЬКО факты из предоставленных описаний объектов. Не выдумывай новых фактов.
+    Ты — гид по городской прогулке. Отвечай на {language}.
+    Используй ТОЛЬКО факты из предоставленных описаний объектов. Не выдумывай.
 
-Сформируй JSON строго по схеме:
-{{
-  "intro": "1–2 предложения вводного контекста под интересы пользователя",
-  "mains": [
-    {{"title": "...", "summary": "2–3 коротких предложения для этой основной точки"}}
-  ],
-  "extras": [
-    {{"title": "...", "why_interesting": "1 лаконичное предложение, почему стоит заглянуть по пути"}}
-  ],
-  "outro": "краткое завершающее предложение"
-}}
+    У тебя есть ДВА фиксированных списка названий (строгий порядок):
+    - mains_allowed: {[(p.get("title") or "").strip() for p in (main_points or [])]}
+    - extras_allowed: {[(p.get("title") or "").strip() for p in (extra_points or [])]}
 
-Требования к стилю:
-- Плотно по сути, без воды,  не повторяй одно и то же.
-- Если описания у точки почти нет, дай нейтральную причинку посетить (панорама/атмосфера/история района) без домыслов.
-- Не используй markdown, эмодзи и кавычки-ёлочки.
-- Возвращай ТОЛЬКО валидный JSON без преамбулы и постскриптума.
-"""
+    ЖЁСТКИЕ ПРАВИЛА:
+    - Не добавляй новых объектов, не удаляй существующие.
+    - Не меняй порядок: выходные массивы должны идти в ТОМ ЖЕ порядке.
+    - В полях title КОПИРУЙ название буква-в-букву.
+    - Если фактов мало, давай нейтральное обоснование (атмосфера/панорама/история района) БЕЗ домыслов.
+
+    Верни ТОЛЬКО JSON по схеме:
+    {{
+    "intro": "1–2 предложения вводного контекста",
+      "mains": [ {{"title": "...", "summary": "2–3 коротких фактуальных предложения" }} ],
+      "extras": [ {{"title": "...", "why_interesting": "1 короткое фактуальное предложение" }} ],
+      "outro": "краткое завершение"
+    }}
+    """
 
     resp = model.generate_content(
         [
